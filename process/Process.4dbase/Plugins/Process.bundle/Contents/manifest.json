@@ -1,0 +1,1 @@
+﻿{"name":"Process","id":20000,"commands":[{"theme":"Process","syntax":"PROCESS GET ARGUMENTS(&Y)"},{"theme":"Process","syntax":"PROCESS SET VARIABLE(&T;&T)"},{"theme":"Process","syntax":"PROCESS GET VARIABLE(&T;&T)"}]}
