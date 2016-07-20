@@ -6,8 +6,8 @@ Get and set process variables, read command line arguments
 |🆗|🆗|🆗|🆗|
 
 Commands
----
+```
 PROCESS GET ARGUMENTS (arguments)
 PROCESS SET VARIABLE (name;value)
 PROCESS GET VARIABLE (name;value)
----
+```
