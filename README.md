@@ -31,3 +31,21 @@ Parameter|Type|Description
 name|TEXT|Process variable name
 value|TEXT|Process variable value
 
+```
+PROCESS GET LIST (names;paths;ids)
+```
+
+Parameter|Type|Description
+------------|------------|----
+names|ARRAY TEXT|
+paths|ARRAY TEXT|
+ids|ARRAY LONGINT|
+
+```
+id:=PROCESS Get id 
+```
+
+Parameter|Type|Description
+------------|------------|----
+id|LONGINT|
+
