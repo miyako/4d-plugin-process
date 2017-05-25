@@ -8,9 +8,13 @@
  #
  # --------------------------------------------------------------------------------*/
 
-
+#if VERSIONWIN
+#include <TlHelp32.h>
+#endif
 
 // --- Process
 void PROCESS_GET_ARGUMENTS(sLONG_PTR *pResult, PackagePtr pParams);
 void PROCESS_SET_VARIABLE(sLONG_PTR *pResult, PackagePtr pParams);
 void PROCESS_GET_VARIABLE(sLONG_PTR *pResult, PackagePtr pParams);
+void PROCESS_GET_LIST(sLONG_PTR *pResult, PackagePtr pParams);
+void PROCESS_Get_id(sLONG_PTR *pResult, PackagePtr pParams);

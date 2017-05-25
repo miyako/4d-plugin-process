@@ -46,6 +46,14 @@ void CommandDispatcher (PA_long32 pProcNum, sLONG_PTR *pResult, PackagePtr pPara
 			PROCESS_GET_VARIABLE(pResult, pParams);
 			break;
 
+		case 4 :
+			PROCESS_GET_LIST(pResult, pParams);
+			break;
+			
+		case 5 :
+			PROCESS_Get_id(pResult, pParams);
+			break;
+			
 	}
 }
 
@@ -149,3 +157,115 @@ void PROCESS_GET_VARIABLE(sLONG_PTR *pResult, PackagePtr pParams)
 	Param2.toParamAtIndex(pParams, 2);
 }
 
+void PROCESS_Get_id(sLONG_PTR *pResult, PackagePtr pParams)
+{
+	C_LONGINT returnValue;
+	
+#if VERSIONMAC
+	ProcessSerialNumber psn;
+	pid_t pid = 0;
+	
+	if(GetCurrentProcess(&psn) == noErr)
+		GetProcessPID(&psn, &pid);
+	
+	returnValue.setIntValue(pid);
+#else
+	returnValue.setIntValue((unsigned int)GetCurrentProcessId());
+#endif
+	
+	returnValue.setReturn(pResult);
+}
+
+void PROCESS_GET_LIST(sLONG_PTR *pResult, PackagePtr pParams)
+{
+	ARRAY_TEXT Param1;
+	ARRAY_TEXT Param2;
+	ARRAY_LONGINT Param3;
+	
+	Param1.setSize(1);
+	Param2.setSize(1);
+	Param3.setSize(1);
+	
+#if VERSIONWIN
+	using namespace std;
+	
+	HANDLE hProcessSnap = INVALID_HANDLE_VALUE;
+	PROCESSENTRY32 pe32;
+	
+	HANDLE hModuleSnap = INVALID_HANDLE_VALUE;
+	MODULEENTRY32 me32;
+	
+	hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	
+	if(hProcessSnap != INVALID_HANDLE_VALUE)
+	{
+		pe32.dwSize = sizeof(PROCESSENTRY32);
+		
+		if(Process32First(hProcessSnap, &pe32))
+		{
+			do
+			{
+				hModuleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pe32.th32ProcessID);
+				wstring process_name = pe32.szExeFile;
+				if(hModuleSnap != INVALID_HANDLE_VALUE)
+				{
+					me32.dwSize = sizeof(MODULEENTRY32);
+					
+					if(Module32First(hModuleSnap, &me32))
+					{
+						do
+						{
+							wstring module_name = me32.szModule;
+							
+							if(module_name == process_name)
+							{
+								CUTF16String p1 = (const PA_Unichar*)me32.szModule;
+								Param1.appendUTF16String(&p1);
+								CUTF16String p2 = (const PA_Unichar*)me32.szExePath;
+								Param2.appendUTF16String(&p2);
+								Param3.appendIntValue(me32.th32ProcessID);
+							}
+							
+						}while(Module32Next(hModuleSnap, &me32));
+						CloseHandle(hModuleSnap);
+					}
+				}
+				
+			}while(Process32Next(hProcessSnap, &pe32));
+			CloseHandle(hProcessSnap);
+		}
+	}
+#else
+	NSWorkspace *sharedWorkspace = [NSWorkspace sharedWorkspace];
+	NSArray *launchedApplications = [sharedWorkspace launchedApplications];
+	
+	unsigned int i;
+	
+	for(i = 0; i < [launchedApplications count]; i++)
+	{
+		NSString *NSApplicationName = (NSString *)[[launchedApplications objectAtIndex:i] valueForKey:@"NSApplicationName"];
+		Param1.appendUTF16String(NSApplicationName);
+		
+		NSString *NSApplicationPath = (NSString *)[[launchedApplications objectAtIndex:i] valueForKey:@"NSApplicationPath"];
+		NSURL *url = [[NSURL alloc]initFileURLWithPath:NSApplicationPath];
+		
+		if(url)
+		{
+			NSString *filePath = (NSString *)CFURLCopyFileSystemPath((CFURLRef)url, kCFURLHFSPathStyle);
+			Param2.appendUTF16String(filePath);
+			[filePath release];
+			[url release];
+		}else{
+			Param2.appendUTF16String(@"");
+		}
+		
+		NSNumber *NSApplicationProcessIdentifier = (NSNumber *)[[launchedApplications objectAtIndex:i] valueForKey:@"NSApplicationProcessIdentifier"];
+		Param3.appendIntValue([NSApplicationProcessIdentifier intValue]);
+	}
+#endif
+	
+	Param1.toParamAtIndex(pParams, 1);
+	Param2.toParamAtIndex(pParams, 2);
+	Param3.toParamAtIndex(pParams, 3);
+	
+}
