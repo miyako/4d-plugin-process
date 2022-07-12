@@ -11,34 +11,37 @@ Previous (v16 or earlier) available in [thread-unsafe](https://github.com/miyako
 ## Syntax
 
 ```4d
-arguments:=PROCESS Get arguments
+PROCESS GET ARGUMENTS(arguments)
 ```
 
 Parameter|Type|Description
 ------------|------------|----
-arguments|TEXT|``json``
+arguments|ARRAY TEXT|
 
 ```4d
-PROCESS SET VARIABLES (dict)
-dict:=PROCESS Get variables
+PROCESS SET VARIABLE(name;name)
+PROCESS GET VARIABLE(name;value)
 ```
 
 Parameter|Type|Description
 ------------|------------|----
-dict|TEXT|``json``
+name|TEXT|
+value|TEXT|
 
 ```4d
-list:=PROCESS Get list
+PROCESS GET LIST(name;path;)
 ```
 
 Parameter|Type|Description
 ------------|------------|----
-list|TEXT|``json``
+name|ARRAY TEXT|
+path|ARRAY TEXT|
+pid|ARRAY LONGINT|
 
 ```4d
-id:=PROCESS Get id 
+pid:=PROCESS Get id 
 ```
 
 Parameter|Type|Description
 ------------|------------|----
-id|LONGINT|
+pid|LONGINT|
