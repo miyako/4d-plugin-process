@@ -29,7 +29,7 @@ name|TEXT|
 value|TEXT|
 
 ```4d
-PROCESS GET LIST(name;path;)
+PROCESS GET LIST(name;path;pid)
 ```
 
 Parameter|Type|Description
