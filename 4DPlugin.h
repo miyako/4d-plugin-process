@@ -10,6 +10,7 @@
 
 #if VERSIONWIN
 #include <TlHelp32.h>
+#include <shellapi.h>  // CommandLineToArgvW (PROCESS_GET_ARGUMENTS) -- not pulled in by windows.h
 #endif
 
 // --- Process
