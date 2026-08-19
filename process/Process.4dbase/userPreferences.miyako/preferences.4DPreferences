@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?><preferences stamp="4">
+	<com.4d>
+		<database>
+			<data_storage data_path="Process.4DD"/>
+		</database>
+	</com.4d>
+	<internal_prefs_4d>
+		<explorer default_page="2" list_components_opened=""/>
+		<windows>
+			<window name="main" left="40" top="160" width="600" height="450"/>
+		</windows>
+	</internal_prefs_4d>
+</preferences>
