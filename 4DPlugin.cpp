@@ -12,6 +12,15 @@
 #include "4DPluginAPI.h"
 #include "4DPlugin.h"
 
+#include <mutex>
+
+// Guards access to the process-wide OS environment block (setenv/getenv on
+// mac, SetEnvironmentVariable/GetEnvironmentVariable on Windows). Both are
+// declared threadSafe in manifest.json, but neither underlying OS call is
+// safe against concurrent Set/Get from other threads without external
+// synchronization -- see PROCESS_SET_VARIABLE / PROCESS_GET_VARIABLE below.
+static std::mutex gEnvVarMutex;
+
 void PluginMain(PA_long32 selector, PA_PluginParameters params)
 {
 	try
@@ -72,20 +81,23 @@ void PROCESS_GET_ARGUMENTS(sLONG_PTR *pResult, PackagePtr pParams)
 	{
 		Param1.setSize(1);
 		
-		for(unsigned int i = 0; i < nArgs; ++i)
+		for(int i = 0; i < nArgs; ++i)
 		{
 			Param1.appendUTF16String((const PA_Unichar *)szArglist[i]);
 		}
 		LocalFree(szArglist);
 	}
 #else
-	NSArray *arguments = [[NSProcessInfo processInfo]arguments];
-	
-	Param1.setSize(1);
-	
-	for(unsigned int i = 0;i < [arguments count];++i)
+	@autoreleasepool
 	{
-		Param1.appendUTF16String([arguments objectAtIndex:i]);
+		NSArray *arguments = [[NSProcessInfo processInfo]arguments];
+		
+		Param1.setSize(1);
+		
+		for(unsigned int i = 0;i < [arguments count];++i)
+		{
+			Param1.appendUTF16String([arguments objectAtIndex:i]);
+		}
 	}
 #endif
 
@@ -99,6 +111,8 @@ void PROCESS_SET_VARIABLE(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 	Param2.fromParamAtIndex(pParams, 2);
+
+	std::lock_guard<std::mutex> lock(gEnvVarMutex);
 
 #if VERSIONMAC
 	CUTF8String name, value;
@@ -128,14 +142,20 @@ void PROCESS_GET_VARIABLE(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
+	std::lock_guard<std::mutex> lock(gEnvVarMutex);
+
 #if VERSIONMAC
 	CUTF8String name, value;
 	Param1.copyUTF8String(&name);
 	
 	if(name.length())
 	{
-		value = CUTF8String((const uint8_t *)getenv((const char *)name.c_str()));
-		Param2.setUTF8String(&value);
+		const char *env = getenv((const char *)name.c_str());
+		if(env)
+		{
+			value = CUTF8String((const uint8_t *)env);
+			Param2.setUTF8String(&value);
+		}
 	}
 #else
 	DWORD size = 0;
@@ -144,7 +164,7 @@ void PROCESS_GET_VARIABLE(sLONG_PTR *pResult, PackagePtr pParams)
 	
 	if(name.length())
 	{
-		if(size = GetEnvironmentVariable((LPCTSTR)name.c_str(), NULL, 0))
+		if((size = GetEnvironmentVariable((LPCTSTR)name.c_str(), NULL, 0)) != 0)
 		{
 			std::vector<wchar_t> buf(size);
 			GetEnvironmentVariable((LPCTSTR)name.c_str(), (LPTSTR)&buf[0], size);
@@ -160,18 +180,31 @@ void PROCESS_GET_VARIABLE(sLONG_PTR *pResult, PackagePtr pParams)
 void PROCESS_Get_id(sLONG_PTR *pResult, PackagePtr pParams)
 {
 	C_LONGINT returnValue;
-	
+
+	// This is the only command in this file with a declared return value
+	// (manifest.json: "PROCESS Get id:L"). PluginMain's outer try/catch has
+	// no return-value context to fall back on, so a local try/catch here
+	// guarantees setReturn() always runs -- without it, an exception on this
+	// path would leave the host waiting indefinitely for a return that never
+	// comes, rather than just crashing or no-op'ing.
+	try
+	{
 #if VERSIONMAC
-	ProcessSerialNumber psn;
-	pid_t pid = 0;
-	
-	if(GetCurrentProcess(&psn) == noErr)
-		GetProcessPID(&psn, &pid);
-	
-	returnValue.setIntValue(pid);
+		ProcessSerialNumber psn;
+		pid_t pid = 0;
+		
+		if(GetCurrentProcess(&psn) == noErr)
+			GetProcessPID(&psn, &pid);
+		
+		returnValue.setIntValue(pid);
 #else
-	returnValue.setIntValue((unsigned int)GetCurrentProcessId());
+		returnValue.setIntValue((unsigned int)GetCurrentProcessId());
 #endif
+	}
+	catch(...)
+	{
+		returnValue.setIntValue(-1);
+	}
 	
 	returnValue.setReturn(pResult);
 }
@@ -187,8 +220,6 @@ void PROCESS_GET_LIST(sLONG_PTR *pResult, PackagePtr pParams)
 	Param3.setSize(1);
 	
 #if VERSIONWIN
-	using namespace std;
-	
 	HANDLE hProcessSnap = INVALID_HANDLE_VALUE;
 	PROCESSENTRY32 pe32;
 	
@@ -206,29 +237,28 @@ void PROCESS_GET_LIST(sLONG_PTR *pResult, PackagePtr pParams)
 			do
 			{
 				hModuleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pe32.th32ProcessID);
-				wstring process_name = pe32.szExeFile;
+				
 				if(hModuleSnap != INVALID_HANDLE_VALUE)
 				{
 					me32.dwSize = sizeof(MODULEENTRY32);
 					
+					// Module32First always returns the process's own executable
+					// module first (documented Windows behavior), so there's no
+					// need to walk the rest of the module list comparing names.
 					if(Module32First(hModuleSnap, &me32))
 					{
-						do
-						{
-							wstring module_name = me32.szModule;
-							
-							if(module_name == process_name)
-							{
-								CUTF16String p1 = (const PA_Unichar*)me32.szModule;
-								Param1.appendUTF16String(&p1);
-								CUTF16String p2 = (const PA_Unichar*)me32.szExePath;
-								Param2.appendUTF16String(&p2);
-								Param3.appendIntValue(me32.th32ProcessID);
-							}
-							
-						}while(Module32Next(hModuleSnap, &me32));
-						CloseHandle(hModuleSnap);
+						CUTF16String p1 = (const PA_Unichar*)me32.szModule;
+						Param1.appendUTF16String(&p1);
+						CUTF16String p2 = (const PA_Unichar*)me32.szExePath;
+						Param2.appendUTF16String(&p2);
+						Param3.appendIntValue(me32.th32ProcessID);
 					}
+					
+					// Always close, regardless of whether Module32First
+					// succeeded -- previously this was only reached on the
+					// success path, leaking a handle per process where it
+					// failed (e.g. protected/system processes).
+					CloseHandle(hModuleSnap);
 				}
 				
 			}while(Process32Next(hProcessSnap, &pe32));
@@ -236,31 +266,34 @@ void PROCESS_GET_LIST(sLONG_PTR *pResult, PackagePtr pParams)
 		}
 	}
 #else
-	NSWorkspace *sharedWorkspace = [NSWorkspace sharedWorkspace];
-	NSArray *launchedApplications = [sharedWorkspace launchedApplications];
-	
-	unsigned int i;
-	
-	for(i = 0; i < [launchedApplications count]; i++)
+	@autoreleasepool
 	{
-		NSString *NSApplicationName = (NSString *)[[launchedApplications objectAtIndex:i] valueForKey:@"NSApplicationName"];
-		Param1.appendUTF16String(NSApplicationName);
+		NSWorkspace *sharedWorkspace = [NSWorkspace sharedWorkspace];
+		NSArray *launchedApplications = [sharedWorkspace launchedApplications];
 		
-		NSString *NSApplicationPath = (NSString *)[[launchedApplications objectAtIndex:i] valueForKey:@"NSApplicationPath"];
-		NSURL *url = [[NSURL alloc]initFileURLWithPath:NSApplicationPath];
+		unsigned int i;
 		
-		if(url)
+		for(i = 0; i < [launchedApplications count]; i++)
 		{
-			NSString *filePath = (NSString *)CFURLCopyFileSystemPath((CFURLRef)url, kCFURLHFSPathStyle);
-			Param2.appendUTF16String(filePath);
-			[filePath release];
-			[url release];
-		}else{
-			Param2.appendUTF16String(@"");
+			NSString *NSApplicationName = (NSString *)[[launchedApplications objectAtIndex:i] valueForKey:@"NSApplicationName"];
+			Param1.appendUTF16String(NSApplicationName);
+			
+			NSString *NSApplicationPath = (NSString *)[[launchedApplications objectAtIndex:i] valueForKey:@"NSApplicationPath"];
+			NSURL *url = [[NSURL alloc]initFileURLWithPath:NSApplicationPath];
+			
+			if(url)
+			{
+				NSString *filePath = (NSString *)CFURLCopyFileSystemPath((CFURLRef)url, kCFURLHFSPathStyle);
+				Param2.appendUTF16String(filePath);
+				[filePath release];
+				[url release];
+			}else{
+				Param2.appendUTF16String(@"");
+			}
+			
+			NSNumber *NSApplicationProcessIdentifier = (NSNumber *)[[launchedApplications objectAtIndex:i] valueForKey:@"NSApplicationProcessIdentifier"];
+			Param3.appendIntValue([NSApplicationProcessIdentifier intValue]);
 		}
-		
-		NSNumber *NSApplicationProcessIdentifier = (NSNumber *)[[launchedApplications objectAtIndex:i] valueForKey:@"NSApplicationProcessIdentifier"];
-		Param3.appendIntValue([NSApplicationProcessIdentifier intValue]);
 	}
 #endif
 	
