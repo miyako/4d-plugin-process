@@ -1,3 +1,4 @@
 process/build/*
 Process.4dbase/userPreferences.*
 Process.4dbase/Project/DerivedData/*
+build/*
