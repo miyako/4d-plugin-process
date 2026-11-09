@@ -278,6 +278,9 @@ class GitTests(unittest.TestCase):
         self.assertEqual(git(self.remote, "tag", "--list"), "")
         self.assertEqual(git(self.local, "rev-list", "--parents", "-n", "1", new),
                          f"{new} {self.sha}")
+        self.assertEqual(
+            git(self.local, "log", "-1", "--format=%(trailers:only,unfold)"),
+            "Co-authored-by: Copilot App <223556219+Copilot@users.noreply.github.com>")
         self.assertEqual(git(self.local, "status", "--porcelain"), "")
         self.assertEqual(set(git(self.local, "diff-tree", "--no-commit-id", "--name-only",
                                  "-r", "HEAD").splitlines()), set(map(str, source.SOURCE_PATHS)))
