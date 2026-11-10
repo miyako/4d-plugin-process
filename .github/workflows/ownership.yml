@@ -1,0 +1,31 @@
+name: Ownership
+
+on:
+  push:
+    branches: [master, miyako-process-ownership-audit]
+    paths:
+      - '4D Plugin API/**'
+      - '4DPlugin.cpp'
+      - '4DPlugin.h'
+      - '.github/tests/ownership*'
+      - '.github/tests/test_ownership.py'
+      - '.github/workflows/ownership.yml'
+  pull_request:
+    paths:
+      - '4D Plugin API/**'
+      - '4DPlugin.cpp'
+      - '4DPlugin.h'
+      - '.github/tests/ownership*'
+      - '.github/tests/test_ownership.py'
+      - '.github/workflows/ownership.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-host:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unsigned offline actual-source ASan and UBSan
+        run: python3 .github/tests/test_ownership.py -v
