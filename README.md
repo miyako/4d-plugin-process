@@ -110,6 +110,16 @@ fail-closed paginated API responses, retained publication state, and workflow
 wiring/native-command stubs. Native runner and credential-dependent execution
 must still be exercised by an explicitly authorized manual Build.
 
+## Native ownership regression checks
+
+Run `python3 .github/tests/test_ownership.py -v` on macOS for an unsigned,
+offline ASan/UBSan host test of the actual dispatcher, all shared wrappers and
+the complete bundled SDK. It redirects process, environment and UI boundaries
+to synthetic fixtures; it does not build, sign, package or release the plugin.
+The [ownership audit](.github/tests/ownership-audit.md) records the immutable
+baseline/SDK inventory, contracts, baseline-versus-fixed results, and explicit
+OOM, metadata and real Windows/4D limits.
+
 ## Syntax
 
 ```4d
